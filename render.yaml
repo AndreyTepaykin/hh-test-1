@@ -1,0 +1,34 @@
+# Render Blueprint для Digital Card API (hh-test-1).
+# Подключение: Render Dashboard -> New -> Blueprint -> выбрать репозиторий с этим файлом.
+# Render требует render.yaml в корне репозитория, поэтому файл лежит здесь, а не в deploy/docker.
+
+services:
+  - type: web
+    name: hh-test-1-api
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    autoDeploy: true
+    # Миграции применяет docker/entrypoint.sh при старте контейнера.
+    # Pre-deploy command срабатывает до переключения трафика (надёжнее), но доступен
+    # не на всех тарифах — включить, если тариф поддерживает:
+    # preDeployCommand: npx prisma migrate deploy
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hh-test-1-db
+          property: connectionString
+
+databases:
+  - name: hh-test-1-db
+    plan: free
+    region: frankfurt
+    databaseName: hh_test_1
+    user: hh_test_1

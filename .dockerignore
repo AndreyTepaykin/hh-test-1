@@ -1,5 +1,15 @@
 node_modules
 dist
+coverage
+*.tsbuildinfo
 .git
-.env
+.gitignore
+.github
+.vscode
+.idea
+.env*
+!.env.example
 *.log
+deploy
+README.md
+docker-compose.yml

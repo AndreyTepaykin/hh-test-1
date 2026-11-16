@@ -10,11 +10,26 @@ GraphQL API профиля Андрея Тепайкина. Apollo Sandbox: [htt
 docker compose up --build
 ```
 
-Контейнер `db` поднимает PostgreSQL 16. Контейнер `app` ждёт healthy-базу, применяет миграции (`prisma migrate deploy`), заполняет данные (`prisma db seed`) и запускает NestJS. Повторный старт не создаёт дубликаты: seed в одной транзакции очищает таблицы и записывает профиль заново.
+Контейнер `db` поднимает PostgreSQL 16. Контейнер `app` ждёт healthy-базу, применяет миграции (`prisma migrate deploy`) и запускает NestJS. Сид в старт контейнера не входит — он очищает таблицы, поэтому запускается отдельно: `docker compose run --rm app npx prisma db seed`.
 
 Проверка процесса: `GET /health` → `{ "status": "ok" }`.
 
 Локально без сборки образа API: поднять только базу (`docker compose up db`), скопировать `.env.example` в `.env`, затем `npm install`, `npx prisma generate`, `npm run db:migrate`, `npm run db:seed`, `npm run start:dev`.
+
+## Продакшн (Linux + Docker)
+
+- Образ собирается из `Dockerfile`: Node 24, запуск от пользователя `node`, healthcheck на `/health`.
+- Миграции применяет `docker/entrypoint.sh` при старте; сид — отдельной командой
+  `npx prisma db seed` (он очищает таблицы, в автозапуск не входит).
+- **Render**: Blueprint `render.yaml` в корне — web-сервис + managed PostgreSQL,
+  `healthCheckPath: /health`, миграции при старте контейнера (pre-deploy command — опционально).
+- **Railway**: деплой из репозитория, `Dockerfile` определяется автоматически, база — отдельным сервисом.
+- **VPS**: `docker build` + reverse proxy с TLS (Caddy/certbot).
+
+Инструкция по шагам, переменные окружения, настройки health-check и чек-лист сдачи —
+[deploy/docker/README.md](deploy/docker/README.md).
+
+Обязательная зависимость для прод-сборки: `@as-integrations/express5` (Apollo Server 5 + Express 5). Без неё процесс падает с `The "@as-integrations/express5" package is missing`.
 
 ## Пример запроса
 
@@ -76,7 +91,9 @@ prisma/
   schema.prisma
   migrations/
   seed.ts
-docker/entrypoint.sh
-Dockerfile
-docker-compose.yml
+docker/entrypoint.sh   миграции + запуск (без сида)
+deploy/docker/         инструкция, env-шаблон для Render/Railway/VPS
+Dockerfile             прод-образ (Node 24, non-root, healthcheck)
+docker-compose.yml     dev-стек (без volume, порты открыты наружу)
+render.yaml            Render Blueprint: web + PostgreSQL
 ```
