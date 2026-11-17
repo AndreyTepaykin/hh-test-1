@@ -1,6 +1,6 @@
 # Цифровая визитка
 
-GraphQL API профиля. Apollo Sandbox: [http://localhost:3000/graphql](http://localhost:3000/graphql).
+GraphQL API профиля. Sandbox: [https://hh-test-1-api.onrender.com/graphql](https://hh-test-1-api.onrender.com/graphql) (прод на Render) или [http://localhost:3000/graphql](http://localhost:3000/graphql) (локально).
 
 ## Запуск
 
@@ -23,6 +23,9 @@ docker compose up --build
   `npx prisma db seed` (он очищает таблицы, в автозапуск не входит).
 - **Render**: Blueprint `render.yaml` в корне — web-сервис + managed PostgreSQL,
   `healthCheckPath: /health`, миграции при старте контейнера (pre-deploy command — опционально).
+  Рабочий деплой: [https://hh-test-1-api.onrender.com](https://hh-test-1-api.onrender.com) —
+  `/health` и `/graphql`. Free-тариф засыпает после ~15 минут без запросов, первый запрос
+  после паузы — до минуты; free PostgreSQL живёт 30 дней.
 
 Инструкция по шагам, переменные окружения, настройки health-check и чек-лист сдачи —
 [deploy/docker/README.md](deploy/docker/README.md).

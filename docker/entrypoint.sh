@@ -7,5 +7,6 @@ npx prisma migrate deploy
 # Сид сюда НЕ входит: prisma/seed.ts очищает таблицы в транзакции, то есть на каждом
 # рестарте контейнера обнулял бы прод-базу. Запускать отдельно и осознанно:
 #     docker compose run --rm app npx prisma db seed
-#     (Render: preDeployCommand уже применён к migrate; сид — вручную из Shell)
+#     (Render: Shell на free-тарифе недоступен, поэтому сид запускается снаружи против
+#      External Database URL — см. deploy/docker/README.md)
 exec node dist/main.js
