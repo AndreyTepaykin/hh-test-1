@@ -1,9 +1,6 @@
 # Продакшн-деплой: Linux + Docker
 
-Локальный Windows-стенд (nginx + `node dist/main.js` + панель) живёт отдельно, в
-`D:\wamp64\www\hh-test-1\WinDeploy\` — к продакшну он отношения не имеет.
-
-Здесь — то, что уезжает на хостинг: образ собирается из `Dockerfile` в корне репозитория,
+Образ собирается из `Dockerfile` в корне репозитория,
 миграции применяются при старте контейнера, сид запускается отдельной командой.
 
 ## Что внутри образа
@@ -56,38 +53,6 @@
 Особенности free-тарифа: сервис засыпает после ~15 минут без запросов (первый запрос после
 паузы — 30–60 с), free PostgreSQL удаляется через 30 дней. Для сдачи задания этого хватает,
 для постоянного продакшна — нет.
-
-## Railway
-
-1. **New Project → Deploy from GitHub repo** — Railway сам найдёт `Dockerfile`.
-2. **New → Database → PostgreSQL**; переменная `DATABASE_URL` появится в сервисе
-   (при необходимости сослаться на неё: `${{Postgres.DATABASE_URL}}`).
-3. Settings → Networking → **Generate Domain**, healthcheck path `/health`.
-4. Миграции: `railway run npx prisma migrate deploy` (или entrypoint сделает это при старте),
-   сид — `railway run npx prisma db seed`, один раз.
-5. Railway живёт на триал-кредитах: когда они кончатся, сервис остановится.
-
-## Свой VPS (тот же образ, без панелей)
-
-```bash
-docker build -t hh-test-1 .
-docker run -d --name hh-test-1 --restart unless-stopped \
-  -p 127.0.0.1:3000:3000 \
-  -e DATABASE_URL='postgresql://card:...@db:5432/card?schema=public' \
-  hh-test-1
-```
-
-Снаружи — reverse proxy с TLS (Caddy поднимает сертификат сам):
-
-```caddyfile
-api.example.com {
-    reverse_proxy 127.0.0.1:3000
-}
-```
-
-Для базы — отдельный контейнер с named volume (`postgres:16-alpine`, volume на
-`/var/lib/postgresql/data`) либо managed-инстанс. Порт 3000 наружу не публиковать:
-приложение слушает `0.0.0.0` внутри контейнера, доступ должен идти только через прокси.
 
 ## Health-check
 

@@ -1,6 +1,6 @@
 # Цифровая визитка
 
-GraphQL API профиля Андрея Тепайкина. Apollo Sandbox: [http://localhost:3000/graphql](http://localhost:3000/graphql).
+GraphQL API профиля. Apollo Sandbox: [http://localhost:3000/graphql](http://localhost:3000/graphql).
 
 ## Запуск
 
@@ -23,8 +23,6 @@ docker compose up --build
   `npx prisma db seed` (он очищает таблицы, в автозапуск не входит).
 - **Render**: Blueprint `render.yaml` в корне — web-сервис + managed PostgreSQL,
   `healthCheckPath: /health`, миграции при старте контейнера (pre-deploy command — опционально).
-- **Railway**: деплой из репозитория, `Dockerfile` определяется автоматически, база — отдельным сервисом.
-- **VPS**: `docker build` + reverse proxy с TLS (Caddy/certbot).
 
 Инструкция по шагам, переменные окружения, настройки health-check и чек-лист сдачи —
 [deploy/docker/README.md](deploy/docker/README.md).
@@ -92,7 +90,7 @@ prisma/
   migrations/
   seed.ts
 docker/entrypoint.sh   миграции + запуск (без сида)
-deploy/docker/         инструкция, env-шаблон для Render/Railway/VPS
+deploy/docker/         инструкция по деплою на Render, env-шаблон
 Dockerfile             прод-образ (Node 24, non-root, healthcheck)
 docker-compose.yml     dev-стек (без volume, порты открыты наружу)
 render.yaml            Render Blueprint: web + PostgreSQL
