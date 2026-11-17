@@ -184,7 +184,9 @@ async function main(): Promise<void> {
         },
       },
     });
-  });
+    // Дефолтные 5 с рассчитаны на локальную базу. Сид по внешней managed-базе
+    // (Render) — это ~40 round-trip'ов, поэтому лимит увеличен.
+  }, { timeout: 60_000, maxWait: 15_000 });
 }
 
 main()
