@@ -12,7 +12,8 @@ services:
     dockerContext: .
     healthCheckPath: /health
     autoDeploy: true
-    # Миграции применяет docker/entrypoint.sh при старте контейнера.
+    # Миграции и сид демо-данных выполняет docker/entrypoint.sh при старте контейнера
+    # (сид идемпотентен: заполняет только пустую базу).
     # Pre-deploy command срабатывает до переключения трафика (надёжнее), но доступен
     # не на всех тарифах — включить, если тариф поддерживает:
     # preDeployCommand: npx prisma migrate deploy

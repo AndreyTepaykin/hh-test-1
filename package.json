@@ -8,6 +8,8 @@
   },
   "scripts": {
     "build": "nest build",
+    "prestart": "npm run prestart:dev",
+    "prestart:dev": "npm run db:generate && npm run db:migrate && npm run db:seed",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/main.js",
@@ -15,6 +17,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:migrate:dev": "prisma migrate dev",
     "db:seed": "prisma db seed",
+    "db:reseed": "tsx prisma/seed.ts --force",
     "db:generate": "prisma generate"
   },
   "dependencies": {

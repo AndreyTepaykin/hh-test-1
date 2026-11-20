@@ -5,7 +5,7 @@
 #
 # Сборка:  docker build -t hh-test-1 .
 # Запуск:  docker run --rm -p 3000:3000 -e DATABASE_URL=... hh-test-1
-# Миграции применяются в entrypoint, сид — отдельной командой (см. deploy/docker/README.md).
+# Миграции и сид выполняет entrypoint при старте контейнера (см. deploy/docker/README.md).
 
 FROM node:24-alpine AS build
 WORKDIR /app
