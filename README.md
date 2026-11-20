@@ -10,17 +10,24 @@ GraphQL API профиля. Sandbox: [https://hh-test-1-api.onrender.com/graphql
 docker compose up --build
 ```
 
-Контейнер `db` поднимает PostgreSQL 16. Контейнер `app` ждёт healthy-базу, применяет миграции (`prisma migrate deploy`) и запускает NestJS. Сид в старт контейнера не входит — он очищает таблицы, поэтому запускается отдельно: `docker compose run --rm app npx prisma db seed`.
+Контейнер `db` поднимает PostgreSQL 16. Контейнер `app` ждёт healthy-базу, применяет миграции, заливает данные в пустую базу и запускает NestJS. Отдельного шага с сидом нет: после `docker compose up` запрос `query { profile { name } }` сразу возвращает данные.
 
 Проверка процесса: `GET /health` → `{ "status": "ok" }`.
 
-Локально без сборки образа API: поднять только базу (`docker compose up db`), скопировать `.env.example` в `.env`, затем `npm install`, `npx prisma generate`, `npm run db:migrate`, `npm run db:seed`, `npm run start:dev`.
+Локально без сборки образа API:
+- поднять базу: `docker compose up db` (или любой PostgreSQL — см. `.env.example`);
+- скопировать `.env.example` в `.env` и проверить `DATABASE_URL`;
+- `npm install`;
+- `npm run start:dev` — хуки `prestart`/`prestart:dev` сами выполнят `prisma generate`, `migrate deploy` и сид.
+
+База должна существовать: `migrate deploy` создаёт таблицы, но не саму базу. В compose её создаёт `POSTGRES_DB`, локально — `createdb`.
 
 ## Продакшн (Linux + Docker)
 
 - Образ собирается из `Dockerfile`: Node 24, запуск от пользователя `node`, healthcheck на `/health`.
-- Миграции применяет `docker/entrypoint.sh` при старте; сид — отдельной командой
-  `npx prisma db seed` (он очищает таблицы, в автозапуск не входит).
+- Миграции и сид данных выполняет `docker/entrypoint.sh` при старте контейнера:
+  `migrate deploy` → `db seed` → `node dist/main.js`. Сид идемпотентен — на заполненной
+  базе он не делает ни одной записи.
 - **Render**: Blueprint `render.yaml` в корне — web-сервис + managed PostgreSQL,
   `healthCheckPath: /health`, миграции при старте контейнера (pre-deploy command — опционально).
   Рабочий деплой: [https://hh-test-1-api.onrender.com](https://hh-test-1-api.onrender.com) —
@@ -63,6 +70,23 @@ query {
 }
 ```
 
+## Инициализация базы
+
+База приводится в рабочее состояние при каждом старте приложения — и в Docker, и локально:
+
+- `prisma migrate deploy` применяет миграции (идемпотентно, версия схемы хранится в `_prisma_migrations`);
+- `prisma db seed` заливает профиль, скиллы, опыт и проекты, **только если профиля в базе ещё нет**.
+
+Сид не удаляет и не перезаписывает существующие строки, потому что выполняется на каждом старте контейнера, а Render перезапускает сервис при деплое и после засыпания. Проверка «есть ли профиль» идёт в той же транзакции под `pg_advisory_xact_lock`, поэтому два одновременно стартующих контейнера не создадут два профиля: второй дождётся коммита первого и увидит заполненную базу.
+
+Полная перезаливка — только осознанно, когда данные в `prisma/seed.ts` изменились:
+
+```bash
+npm run db:reseed   # tsx prisma/seed.ts --force: очистить таблицы и залить заново
+```
+
+В контейнере то же самое: `docker compose run --rm app npx tsx prisma/seed.ts --force`.
+
 ## Архитектура
 
 Слои разделены так, чтобы GraphQL, правила чтения и доступ к базе не смешивались.
@@ -76,7 +100,7 @@ GraphQL собран code-first (`@nestjs/graphql` + Apollo Driver, схема �
 
 Связи не подгружаются в корневом `profile`. Поля `links`, `skills`, `experience`, `projects` и `achievements` — отдельные `@ResolveField`. DataLoader собирает id за тик event loop и делает один `findMany` с `IN (...)` на каждую запрошенную связь. Поле, которого нет в запросе клиента, резолвер не вызывает, и таблица не читается. Достижения нескольких мест работы уходят одним запросом по `experienceId`.
 
-База — PostgreSQL. Prisma хранит схему, SQL-миграцию и seed. На пустой базе `migrate deploy` создаёт таблицы, seed кладёт одну строку профиля и связанные записи. API только на чтение: мутации визитке не нужны.
+База — PostgreSQL. Prisma хранит схему, SQL-миграцию и seed. На пустой базе `migrate deploy` создаёт таблицы, seed кладёт одну строку профиля и связанные записи; на заполненной базе сид выходит после проверки `count`, поэтому старт ничего не меняет. API только на чтение: мутации визитке не нужны.
 
 ## Структура
 
@@ -92,7 +116,7 @@ prisma/
   schema.prisma
   migrations/
   seed.ts
-docker/entrypoint.sh   миграции + запуск (без сида)
+docker/entrypoint.sh   миграции + сид + запуск
 deploy/docker/         инструкция по деплою на Render, env-шаблон
 Dockerfile             прод-образ (Node 24, non-root, healthcheck)
 docker-compose.yml     dev-стек (без volume, порты открыты наружу)

@@ -1,7 +1,7 @@
 # Продакшн-деплой: Linux + Docker
 
 Образ собирается из `Dockerfile` в корне репозитория,
-миграции применяются при старте контейнера, сид запускается отдельной командой.
+миграции и сид демо-данных выполняются при старте контейнера.
 
 ## Что внутри образа
 
@@ -10,9 +10,10 @@
   затем runtime только с `node_modules`, `dist`, `prisma`, `prisma.config.ts`.
 - Процесс работает от пользователя `node`, а не от root.
 - `HEALTHCHECK` бьёт в `GET /health` (порт из `PORT`, по умолчанию 3000).
-- `docker/entrypoint.sh` делает `npx prisma migrate deploy` и запускает `node dist/main.js`.
-  **Сида в entrypoint нет**: `prisma/seed.ts` очищает таблицы в транзакции, на каждом рестарте
-  контейнера это обнуляло бы прод-базу.
+- `docker/entrypoint.sh` выполняет `npx prisma migrate deploy`, затем `npx prisma db seed`
+  и запускает `node dist/main.js`. Сид идемпотентен: `prisma/seed.ts` заливает данные только
+  в пустую базу (проверка `profile.count()` под advisory-локом), поэтому рестарты контейнера
+  и пробуждения после паузы free-тарифа ничего не перезаписывают.
 
 `prisma.config.ts` копируется в образ намеренно: без него `npx prisma db seed` завершается
 с кодом 0, ничего не делая (проверено на Prisma 6.16), а миграции теряют путь к схеме.
@@ -40,37 +41,43 @@
 1. Запушить репозиторий в GitHub.
 2. Render Dashboard → **New → Blueprint** → выбрать репозиторий. Render прочитает `render.yaml`
    (он обязан лежать в корне репозитория, поэтому не в `deploy/docker`).
-3. Дождаться сборки. Первый деплой создаст пустую базу — миграции применит entrypoint при старте
-   (в логах видно `prisma migrate deploy`). Если контейнер стартовал раньше базы, деплой упадёт:
-   на free Shell нет, поэтому либо **Manual Deploy → Deploy latest commit**, либо тот же
-   `migrate deploy` снаружи по External Database URL (см. ниже).
-4. Залить демо-данные **один раз** — см. [«Сид демо-данных на free-тарифе»](#сид-демо-данных-на-free-тарифе):
-   Shell и SSH на free-плане недоступны, поэтому сид идёт снаружи.
+3. Дождаться сборки. Первый деплой создаст пустую базу — миграции и сид применит entrypoint при старте
+   (в логах видны `prisma migrate deploy` и `Running seed command`). Если контейнер стартовал раньше базы, деплой упадёт:
+   на free Shell нет, поэтому либо **Manual Deploy → Deploy latest commit**, либо те же команды
+   снаружи по External Database URL (см. ниже).
+4. Проверить данные: `query { profile { name } }` в Sandbox возвращает профиль, а не ошибку
+   `Profile is not seeded`.
 5. Проверить: `https://<service>.onrender.com/health` → `{"status":"ok"}`,
    `https://<service>.onrender.com/graphql` открывает Apollo Sandbox.
 
-### Сид демо-данных на free-тарифе
+### Если база недоступна на старте
 
-У free web service нет ни Shell в дашборде, ни SSH
-([Render: SSH and Shell Access](https://render.com/docs/ssh)), поэтому `npx prisma db seed`
-выполняется с локальной машины против External Database URL.
+Сид и миграции идут в `docker/entrypoint.sh`, отдельный запуск нужен только в одном случае:
+контейнер стартовал раньше базы (на free Render сервис может подняться, когда Postgres ещё не готов)
+и деплой упал. Тогда те же команды выполняются с локальной машины против External Database URL —
+Shell и SSH на free-плане недоступны
+([Render: SSH and Shell Access](https://render.com/docs/ssh)).
 
 1. Render Dashboard → база `hh-test-1-db` → вкладка **Connect** → **External Database URL**.
 2. Дописать в конец `?sslmode=require` — внешние подключения к Render Postgres идут только по TLS.
-3. Дождаться успешного деплоя `hh-test-1-api`: миграции применяет entrypoint при старте контейнера.
-4. Проверить схему и засеять одной сессией:
+3. Применить миграции и сид одной сессией:
 
 ```bash
 cd repo
 URL='postgresql://hh_test_1:<пароль>@dpg-xxxx-a.frankfurt-postgres.render.com/hh_test_1?sslmode=require'
 DATABASE_URL="$URL" npx prisma migrate status   # ожидаем "Database schema is up to date!"
+DATABASE_URL="$URL" npx prisma migrate deploy
 DATABASE_URL="$URL" npx prisma db seed
 ```
 
+4. Перезапустить сервис (**Manual Deploy → Deploy latest commit**): entrypoint теперь видит
+   готовую базу и поднимает приложение.
+
 - URL с паролем не класть в `.env`: `prisma.config.ts` подхватывает `.env`, и тогда локальные
   `prisma migrate dev` пойдут в прод-базу.
-- Сид идемпотентен по результату: в одной транзакции чистит таблицы и вставляет демо-данные.
-  Повторный запуск безопасен, но перезаписывает данные.
+- Сид идемпотентен: заполняет только пустую базу, повторный запуск ничего не меняет, поэтому
+  та же команда безопасна и для уже работающего прода. Принудительная перезаливка —
+  `DATABASE_URL="$URL" npx tsx prisma/seed.ts --force`.
 - Таймаут транзакции в `prisma/seed.ts` поднят до 60 с (`maxWait` 15 с): дефолтных 5 с не хватает
   на ~40 round-trip'ов до внешней базы (`P2028: Transaction already closed`).
 
