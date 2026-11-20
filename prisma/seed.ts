@@ -35,8 +35,28 @@ function withOrder<T>(items: T[]): (T & { sortOrder: number })[] {
 
 const prisma = new PrismaClient();
 
+// Сид запускается на каждом старте приложения (docker/entrypoint.sh, prestart:dev),
+// поэтому по умолчанию он только заполняет пустую базу и никогда не перезаписывает
+// существующие данные. `--force` возвращает прежнее поведение: очистить и залить заново.
+const FORCE = process.argv.includes('--force');
+
 async function main(): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    // Сериализует параллельные старты (два контейнера, CI и локальный запуск сразу):
+    // второй процесс ждёт коммита первого и видит уже заполненную базу. Лок снимается
+    // автоматически в конце транзакции, ключ — произвольная константа. Advisory-лок
+    // возвращает void, который Prisma не умеет десериализовать, поэтому он идёт в DO-блок.
+    await tx.$executeRawUnsafe(
+      'DO $$ BEGIN PERFORM pg_advisory_xact_lock(727001); END $$',
+    );
+
+    if (!FORCE && (await tx.profile.count()) > 0) {
+      console.log(
+        'seed: база уже заполнена — пропускаю (npm run db:reseed — очистить и залить заново)',
+      );
+      return;
+    }
+
     await tx.achievement.deleteMany();
     await tx.experience.deleteMany();
     await tx.project.deleteMany();
