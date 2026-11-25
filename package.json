@@ -12,6 +12,7 @@
     "prestart:dev": "npm run db:generate && npm run db:migrate && npm run db:seed",
     "start": "nest start",
     "start:dev": "nest start --watch",
+    "start:debug": "nest start --watch --debug",
     "start:prod": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:migrate": "prisma migrate deploy",
